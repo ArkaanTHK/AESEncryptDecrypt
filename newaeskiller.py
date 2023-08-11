@@ -5,7 +5,7 @@ from javax.crypto.spec import SecretKeySpec, IvParameterSpec
 import base64
 
 class MyCustomTab(JPanel):
-    def __init__(self):
+    def __init__(self, burp_extender):
 # Create 2 panels with labels and text fields
         self.panel_1 = JPanel()
         self.panel_1.setLayout(BoxLayout(self.panel_1, BoxLayout.Y_AXIS))  # Set Y_AXIS layout for vertical arrangement
@@ -20,6 +20,8 @@ class MyCustomTab(JPanel):
         self.panel_1.add(self.iv_label)  # Add IV label below Secret Key label
         self.panel_1.add(self.text_field_2)
 
+        self.burp_extender = burp_extender
+
         # Create a button
         self.submit_button = JButton("Start", actionPerformed=self.submit_button_clicked)
 
@@ -32,11 +34,14 @@ class MyCustomTab(JPanel):
         self.add(self.submit_button)
         self.add(self.stop_button)
 
+        
+
     def submit_button_clicked(self, event):
-        input_text = self.text_field.getText()
-        print("User input:", input_text)
-        input_text_2 = self.text_field_2.getText()
-        print("User input:", input_text_2)
+        secret_key = self.text_field.getText()
+        iv = self.text_field_2.getText()
+        print("Start button clicked")
+
+        self.burp_extender.set_aes_key_iv(secret_key, iv)
 
     def stop_button_clicked(self, event):
         print("Stop button clicked")
@@ -47,12 +52,17 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
         self.helpers = callbacks.getHelpers()
 
         self.callbacks.setExtensionName("New AES Killer")
-        self.custom_tab = MyCustomTab()  # Create an instance of your custom tab
+        self.custom_tab = MyCustomTab(self)  # Create an instance of your custom tab
         self.callbacks.addSuiteTab(self)  # Add the custom tab to Burp's UI
 
         self.callbacks.registerHttpListener(self)  # Register as an HTTP listener
 
-        self.aes_key = b'0123456789abcdef'
+        self.aes_key = None
+        self.iv = None
+
+    def set_aes_key_iv(self, aes_key, iv):
+        self.aes_key = base64.b64decode(aes_key)
+        self.iv = base64.b64decode(iv)
     def getTabCaption(self):
         return "AES Killer"
 
@@ -88,14 +98,14 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener):
             cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             key_spec = SecretKeySpec(self.aes_key, "AES")
         
-            # Replace the following line with your actual IV (16 bytes for AES)
-            iv = b'0123456789abcdef'
+            iv = self.iv
 
             cipher.init(Cipher.DECRYPT_MODE, key_spec, IvParameterSpec(iv))
 
             ciphertext = base64.b64decode(payload)
             decrypted_bytes = cipher.doFinal(ciphertext)
-            plaintext = decrypted_bytes.decode('utf-8')
+            # print(decrypted_bytes)
+            plaintext = ''.join(chr(byte) for byte in decrypted_bytes)
             return plaintext
         except Exception as e:
             return None
